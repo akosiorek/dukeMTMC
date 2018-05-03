@@ -1,0 +1,6 @@
+.DS_Store
+.ipynb_checkpoints
+processed
+scripts/.idea
+vision.cs.duke.edu
+*.mat
