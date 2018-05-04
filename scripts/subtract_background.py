@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import cv2
 
+import bgsubcnt
+
 from absl import flags
 
 flags.DEFINE_string('input_path', '', '')
@@ -21,8 +23,6 @@ class AbstractBackgroundModel(object):
         fg_mask = (fg_mask / 255).astype(np.float32)
         frame = frame.astype(np.float32) / 255
         frame *= fg_mask[..., np.newaxis]
-        # frame = (1. - frame) * fg_mask[..., np.newaxis]
-        # frame = np.round(frame * 255).astype(np.uint8)
         return frame
 
 
@@ -45,6 +45,17 @@ class BackgroundModelGMG(AbstractBackgroundModel):
         fg_mask = self._model.apply(frame)
         fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, self._kernel)
         return fg_mask
+
+
+class BackgroundModelCNT(AbstractBackgroundModel):
+
+    def __init__(self):
+        self._model = bgsubcnt.createBackgroundSubtractor(5)
+
+    def _fg_mask(self, frame):
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.medianBlur(frame, 3)
+        return self._model.apply(frame)
 
 
 def equalize_histogram(img):
@@ -98,7 +109,7 @@ def subtract_background(background_subtraction, input_path, output_path='', star
             if not os.path.exists(f):
                 os.mkdir(f)
 
-    print('output_path', output_path)
+
     frame_num = starting_frame_num
     while True:
         frame_num += 1
@@ -113,9 +124,11 @@ def subtract_background(background_subtraction, input_path, output_path='', star
             output_video = create_output_video(output_path, frame_num, frame, fps=fps)
 
         frame = 255 - frame
-        frame = equalize_histogram(frame)
-        frame = cv2.bilateralFilter(frame, 25, 15, 15)
+        # frame = equalize_histogram(frame)
+        # frame = cv2.bilateralFilter(frame, 25, 15, 15)
         frame = background_subtraction(frame)
+        frame = cv2.medianBlur(frame, 3)
+        # frame = cv2.bilateralFilter(frame, 5, 15, 15)
 
         if output_width != 0:
             height, width = frame.shape[:2]
@@ -148,8 +161,9 @@ if __name__ == '__main__':
     F = flags.FLAGS
     F(sys.argv)
 
-    background_subtraction = BackgroundModelGMM()
+    # background_subtraction = BackgroundModelGMM()
     # background_subtraction = BackgroundModelGMG()
+    background_subtraction = BackgroundModelCNT()
 
     if os.path.isdir(F.input_path):
         videos = [f for f in os.listdir(F.input_path) if f.endswith('avi')]
