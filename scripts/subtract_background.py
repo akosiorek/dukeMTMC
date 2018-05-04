@@ -47,11 +47,19 @@ class BackgroundModelGMG(AbstractBackgroundModel):
         return fg_mask
 
 
+def equalize_histogram(img):
+
+    rgb = np.split(img, 3, -1)
+    for i, c in enumerate(rgb):
+        rgb[i] = cv2.equalizeHist(c.squeeze())
+
+    return np.stack(rgb, -1)
+
+
 def create_output_video(output_path, frame_num, frame, codec='XVID', fps=30):
     shape = frame.shape
     is_color = len(frame.shape) == 3 and frame.shape[-1] == 3
     frame_size = shape[:2]
-    print(frame_size)
     frame_size = frame_size[1], frame_size[0]
 
     fourcc = cv2.VideoWriter_fourcc(*codec)
@@ -104,6 +112,8 @@ def subtract_background(background_subtraction, input_path, output_path='', star
         if frame_num == starting_frame_num+1 and output_path is not None:
             output_video = create_output_video(output_path, frame_num, frame, fps=fps)
 
+        frame = 255 - frame
+        frame = equalize_histogram(frame)
         frame = cv2.bilateralFilter(frame, 25, 15, 15)
         frame = background_subtraction(frame)
 
