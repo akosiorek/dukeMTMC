@@ -126,9 +126,13 @@ def subtract_background(background_subtraction, input_path, output_path='', star
         frame = 255 - frame
         # frame = equalize_histogram(frame)
         # frame = cv2.bilateralFilter(frame, 25, 15, 15)
-        frame = background_subtraction(frame)
-        frame = cv2.medianBlur(frame, 3)
+        fg_frame = background_subtraction(frame)
+        fg_frame = cv2.medianBlur(fg_frame, 3)
         # frame = cv2.bilateralFilter(frame, 5, 15, 15)
+
+        idx = np.greater(fg_frame, 50)
+        fg_frame[idx] = frame[idx]
+        frame = fg_frame
 
         if output_width != 0:
             height, width = frame.shape[:2]
