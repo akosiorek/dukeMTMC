@@ -25,9 +25,9 @@ class AbstractBackgroundModel(object):
         fg_mask = (fg_mask / 255).astype(np.float32)
         frame = frame.astype(np.float32) / 255
 
-        nnz = fg_mask[np.not_equal(fg_mask, 0.)]
-        if np.count_nonzero(nnz) > 0:
-            print('min = {:.03f}, mean = {:.03f}, max = {:.03f}'.format(nnz.min(), nnz.mean(), nnz.max()))
+        # nnz = fg_mask[np.not_equal(fg_mask, 0.)]
+        # if np.count_nonzero(nnz) > 0:
+        #     print('min = {:.03f}, mean = {:.03f}, max = {:.03f}'.format(nnz.min(), nnz.mean(), nnz.max()))
         frame *= fg_mask[..., np.newaxis]
         return frame
 

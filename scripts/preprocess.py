@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 
 # coding: utf-8
 
@@ -22,7 +23,10 @@ from tensorflow.python.util import nest
 
 from absl import flags
 
-flags.DEFINE_integer('cam', 2, '')
+data_path = 'processed/camera{}_240'
+
+flags.DEFINE_integer('cam', 2, 'Camera number.')
+flags.DEFINE_string('data_path', '', 'Directory with data; if empty, it defaults to {}'.format(data_path))
 
 
 # indices to columns of the ground-truth matrix
@@ -47,11 +51,14 @@ if __name__ == '__main__':
     F(sys.argv)
 
     # path to the ground-truth file
-    gt_path = '../trainvalRaw.mat'
-    # path = '../trainval.mat'
+    gt_path = 'trainvalRaw.mat'
+    # path = 'trainval.mat'
 
     # path to the folder with extracted frames
-    data_path = '../processed/camera{}_240'.format(F.cam)
+    if F.data_path != '':
+        data_path = F.data_path
+    else:
+        data_path = data_path.format(F.cam)
 
 
     # num pixels in the longer side of downscaled videos
