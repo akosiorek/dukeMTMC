@@ -4,3 +4,4 @@ processed
 scripts/.idea
 vision.cs.duke.edu
 *.mat
+*.pyc
