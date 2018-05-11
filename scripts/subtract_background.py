@@ -9,19 +9,25 @@ import bgsubcnt
 
 from absl import flags
 
-flags.DEFINE_string('input_path', '', '')
-flags.DEFINE_string('output_path', '', '')
-flags.DEFINE_integer('every_nth_frame', 1, '')
-flags.DEFINE_integer('output_width', 0, '')
+flags.DEFINE_string('input_path', '', 'Directory or a path to an *.avi files; If directory, all '
+                                      'avi files in this directory will be processed.')
+flags.DEFINE_string('output_path', '', 'Directory where all results will be stored.')
+flags.DEFINE_integer('every_nth_frame', 1, 'If greater than zero, then `every_nth_frame` - 1 '
+                                           'frames are skipped between frames.')
+flags.DEFINE_integer('output_width', 0, 'Rescales images and videos to this width if != 0.')
+flags.DEFINE_string('mode', 'gmm', 'Choose from {gmm, gmg, cnt}.')
 
 
 class AbstractBackgroundModel(object):
 
     def __call__(self, frame):
         fg_mask = self._fg_mask(frame)
-
         fg_mask = (fg_mask / 255).astype(np.float32)
         frame = frame.astype(np.float32) / 255
+
+        nnz = fg_mask[np.not_equal(fg_mask, 0.)]
+        if np.count_nonzero(nnz) > 0:
+            print('min = {:.03f}, mean = {:.03f}, max = {:.03f}'.format(nnz.min(), nnz.mean(), nnz.max()))
         frame *= fg_mask[..., np.newaxis]
         return frame
 
@@ -29,17 +35,24 @@ class AbstractBackgroundModel(object):
 class BackgroundModelGMM(AbstractBackgroundModel):
 
     def __init__(self):
-        self._model = cv2.bgsegm.createBackgroundSubtractorMOG(history=1000, nmixtures=10, backgroundRatio=.7)
+        self._model = cv2.bgsegm.createBackgroundSubtractorMOG(history=500, nmixtures=10, backgroundRatio=.7)
+        self._erosion_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        self._dialation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
 
     def _fg_mask(self, frame):
-        return self._model.apply(frame)
+        frame = cv2.medianBlur(frame, 5)
+        fg = self._model.apply(frame)
+
+        cv2.erode(fg, self._erosion_kernel, fg)
+        cv2.dilate(fg, self._dialation_kernel, fg, iterations=2)
+        return fg
 
 
 class BackgroundModelGMG(AbstractBackgroundModel):
 
     def __init__(self):
         self._kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        self._model = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames=1000, decisionThreshold=.9)
+        self._model = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames=120, decisionThreshold=.9)
 
     def _fg_mask(self, frame):
         fg_mask = self._model.apply(frame)
@@ -50,9 +63,10 @@ class BackgroundModelGMG(AbstractBackgroundModel):
 class BackgroundModelCNT(AbstractBackgroundModel):
 
     def __init__(self):
-        self._model = bgsubcnt.createBackgroundSubtractor(5)
+        self._model = bgsubcnt.createBackgroundSubtractor(5, True, 5*60)
 
     def _fg_mask(self, frame):
+        # frame = cv2.bilateralFilter(frame, 9, 150, 150)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame = cv2.medianBlur(frame, 3)
         return self._model.apply(frame)
@@ -120,8 +134,7 @@ def subtract_background(background_subtraction, input_path, output_path='', star
         if ret is False:
             break
 
-        if frame_num == starting_frame_num+1 and output_path is not None:
-            output_video = create_output_video(output_path, frame_num, frame, fps=fps)
+
 
         frame = 255 - frame
         # frame = equalize_histogram(frame)
@@ -134,13 +147,22 @@ def subtract_background(background_subtraction, input_path, output_path='', star
         fg_frame[idx] = frame[idx]
         frame = fg_frame
 
+        frame = frame.astype(np.float32)
+        frame *= 255. / (frame.max() + 1e-8)
+        frame = np.round(frame).astype(np.uint8)
+
         if output_width != 0:
             height, width = frame.shape[:2]
             ratio = float(output_width) / width
             output_height = np.round(height * ratio).astype(np.int32)
             frame = cv2.resize(frame, (output_width, output_height))
 
+        # print(frame.shape, frame.dtype, frame.max())
+        # print()
         if output_path:
+            if frame_num == starting_frame_num + 1:
+                output_video = create_output_video(output_path, frame_num, frame, fps=fps)
+
             output_video.write(frame)
 
             if frame_num % every_nth_frame == 0:
@@ -165,9 +187,15 @@ if __name__ == '__main__':
     F = flags.FLAGS
     F(sys.argv)
 
-    # background_subtraction = BackgroundModelGMM()
-    # background_subtraction = BackgroundModelGMG()
-    background_subtraction = BackgroundModelCNT()
+    if F.mode == 'gmm':
+        background_subtraction = BackgroundModelGMM()
+    elif F.mode == 'gmg':
+        background_subtraction = BackgroundModelGMG()
+    elif F.mode == 'cnt':
+        background_subtraction = BackgroundModelCNT()
+    else:
+        print('Invalid mode = "{}"'.format(F.mode))
+        sys.exit(1)
 
     if os.path.isdir(F.input_path):
         videos = [f for f in os.listdir(F.input_path) if f.endswith('avi')]
