@@ -9,12 +9,15 @@ import cPickle as pickle
 import numpy as np
 
 from absl import flags
+import zipfile
 
 
-flags.DEFINE_string('input_path', 'processed/camera2_240', 'Directory with pickle files')
-flags.DEFINE_string('output_path', '', 'Output directory; default to the same as `input_path`.')
+flags.DEFINE_string('pickle_path', 'processed/camera2_240', 'Directory with pickle files')
+flags.DEFINE_string('pruned_folder_path', 'processed/camera2_240', 'Directory with folders of pruned sequences')
+
+flags.DEFINE_string('output_path', '', 'Output directory; default to the same as `pickle_path`.')
 flags.DEFINE_string('output_name', 'merged.pickle', 'Name of the output pickle file')
-flags.DEFINE_boolean('save_pruned_seqs', True, 'Saves pruned sequences if True')
+flags.DEFINE_boolean('save_pruned_seqs', False, 'Saves pruned sequences if True')
 
 
 def load_pickle(path):
@@ -58,15 +61,20 @@ if __name__ == '__main__':
     F = flags.FLAGS
     F(sys.argv)
 
-    input_dir = F.input_path if os.path.isdir(F.input_path) else os.path.dirname(F.input_path)
-    output_path = F.output_path if F.output_path else input_dir
+    output_path = F.output_path if F.output_path else F.pickle_path
 
-    data_folders = []
-    for f in os.listdir(input_dir):
-        f = os.path.join(input_dir, f)
-        if os.path.isdir(f) and os.path.exists(f + '.pickle'):
-            data_folders.append(f)
+    data_folders = set()
+    pickles = set()
 
+    pickles = set(filter(lambda f: f.endswith('.pickle'), os.listdir(F.pickle_path)))
+    seq_dir_to_pickle = {}
+
+    for f in os.listdir(F.pruned_folder_path):
+
+        basename = os.path.splitext(f)[0]
+        corresponding_pickle = basename + '.pickle'
+        if corresponding_pickle in pickles:
+            seq_dir_to_pickle[os.path.join(F.pruned_folder_path, f)] = os.path.join(F.pickle_path, corresponding_pickle)
 
     pruned_seqs = []
     if F.save_pruned_seqs:
@@ -74,12 +82,15 @@ if __name__ == '__main__':
         if not os.path.exists(pruned_path):
             os.mkdir(pruned_path)
 
-    for f in data_folders:
-        pickle_name = f + '.pickle'
-        pruned_name = os.path.join(pruned_path, os.path.basename(pickle_name))
-        data = load_pickle(pickle_name)
+    for data_folder, pickle_path in seq_dir_to_pickle.iteritems():
+        data = load_pickle(pickle_path)
 
-        seqs_to_retain = [int(i.split('.')[0]) for i in os.listdir(f) if i.endswith('.jpeg')]
+        if os.path.isdir(data_folder):
+            files = os.listdir(f)
+        elif data_folder.endswith('.zip'):
+            files = map(os.path.basename, zipfile.ZipFile(data_folder).namelist())
+
+        seqs_to_retain = [int(i.split('.')[0]) for i in files if i.endswith('.jpeg')]
         data = {k: v[:, seqs_to_retain] for k, v in data.iteritems()}
 
         if F.save_pruned_seqs:
@@ -87,6 +98,8 @@ if __name__ == '__main__':
 
         pruned_seqs.append(data)
 
-    merged_path = os.path.join(pruned_path, 'merged.pickle')
+    merged_path = F.output_path
+    if not merged_path.endswith('.pickle'):
+        merged_path = os.path.join(merged_path, F.output_name)
     merge_pickles(pruned_seqs, merged_path)
 

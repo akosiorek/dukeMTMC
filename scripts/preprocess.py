@@ -27,6 +27,8 @@ data_path = 'processed/camera{}_240'
 
 flags.DEFINE_integer('cam', 2, 'Camera number.')
 flags.DEFINE_string('data_path', '', 'Directory with data; if empty, it defaults to {}'.format(data_path))
+flags.DEFINE_string('yx', '', 'Y and X corrdinates of the cropped roi; random by default.')
+flags.DEFINE_string('hw', '64,64', 'Size of the cropped ROI.')
 
 
 # indices to columns of the ground-truth matrix
@@ -64,8 +66,7 @@ if __name__ == '__main__':
     # num pixels in the longer side of downscaled videos
     downscaled_longer = 240
 
-    roi_size = 64, 64
-    roi = None
+
 
 
     # the final dataset will be written to this file
@@ -86,12 +87,18 @@ if __name__ == '__main__':
 
     # In[4]:
 
-    if roi is None:
+    roi_size = [int(i.strip()) for i in F.hw.split(',')]
+
+    yx = F.yx
+    if not yx:
         u = np.random.uniform(size=2)
         bounds = np.asarray([downscaled_longer * 9./16, downscaled_longer]) - roi_size
         yx = np.round(bounds * u).astype(np.int32)
-        roi = tuple(yx) + roi_size
-        print 'roi =', roi
+    else:
+        yx = [int(i.strip()) for i in F.yx.split(',')]
+
+    roi = tuple(yx) + tuple(roi_size)
+    print 'roi =', roi
 
     ratio = float(original_longer) / downscaled_longer
     original_roi = ratio * np.asarray(roi)
